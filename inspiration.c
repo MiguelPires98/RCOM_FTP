@@ -1,15 +1,13 @@
 #include "download.h"
 
 
-
-
 int main(int argc, char** argv){
 	if (argc != 2){
 		printf("Usage: %s ftp://[username:password]@site/path/to/file\n", argv[0]);
 		exit(-1);
 	}
 	
-	URLData *data = parseURL(argv[1]);
+	URLInfo *data = parseURL(argv[1]);
 	if(data == NULL){
 		puts("Exiting");
 		exit(-1);
@@ -73,15 +71,31 @@ int main(int argc, char** argv){
 	}	
 	
 	
-	int *pasvResponse = getPort(responses);
+	PortHelper portH = getPort(responses);
 	//printf( "%d.%d.%d.%d", pasvResponse[0], pasvResponse[1], pasvResponse[2], pasvResponse[3]);
 	
-	char ipaddr[21];
-	sprintf(ipaddr,  "%d.%d.%d.%d", pasvResponse[0], pasvResponse[1], pasvResponse[2], pasvResponse[3]);
+	char ipaddr[45];
+    int i;
+    int len=0;
+    int count =0;
+    for(i=0;i<4;i++){
+        len = strlen(portH.port[i]);
+        memcpy(ipaddr+count,portH.port[i], len);
+        count+=len;
+        if(i!=3) ipaddr[count] = '.';
+        else ipaddr[count] = 0;
+        count++;
+    }
+    int iport = 0;
+    iport =  atoi(portH.port[4]) << 8;
+    iport += atoi(portH.port[5]); 
+    puts("ip Address and port from pasv:");
+    puts(ipaddr);
+    printf("%d\n",iport);
 
 	struct sockaddr_in addr;
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons( (pasvResponse[4] << 8) + pasvResponse[5]);
+	addr.sin_port = htons( iport);
 	inet_aton(ipaddr, (struct in_addr*) &addr.sin_addr.s_addr);
 
 	
@@ -121,62 +135,61 @@ int main(int argc, char** argv){
 	
 }
 
+//Done - Francisco Correia, este não foi distribuida na na aula porque estava escondida la em cima
 struct addrinfo* getIP(char* name){
-	
-    struct addrinfo hints;
-	memset(&hints, 0, sizeof hints);
-	//we are only interested in IPv4 address of sock_stream socket type
+
+    struct addrinfo hints, *info;
+    struct sockaddr_in *h;
+    char straddr[46];
+
+
+    memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
-	struct addrinfo *info;
-	memset(&info, 0, sizeof hints);
-	char port[3];
-	sprintf(port, "%d", FTP_PORT);
-	int r = getaddrinfo(name,port, &hints, &info);
+
+	int r = getaddrinfo(name,FTP_PORT_STRING, &hints, &info);
+;
 
 	if(r != 0){
-		fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(r));
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(r));
 		return NULL;
 	}
 	
-	struct sockaddr_in *ip = (struct sockaddr_in*)info->ai_addr; 
-	struct in_addr *addr = &(ip->sin_addr);
-	char* straddr = malloc(100);
-	inet_ntop(AF_INET, addr, straddr, 100);
-	fprintf(stdout, "Address translated to ip %s\n", straddr);
-	free(straddr);
+	h = (struct sockaddr_in*)info->ai_addr; 
+    strcpy(straddr, inet_ntoa(h->sin_addr));
+
+	printf("ip address %s\n", straddr);
+
 	return info;
 }
 
-
-int *getPort(char* ip){
+//Done - Francisco Correia
+PortHelper getPort(char* reply){
 	//puts(ip);
-	int i = 0;
-	char *dump = malloc(100);
-	char port[16][14]; //stack smashing prevention 
-	dump = strtok(ip, "(,)");
-	while((dump = strtok(NULL, "(,)")) != NULL){
+	int i;
+	char *tokenizer;
+	PortHelper portH;
+
+
+	tokenizer = strtok(reply, "(,)");
+
+    i=0;
+	while((tokenizer = strtok(NULL, "(,)")) != NULL){
 		
-		strcpy(port[i++], dump);
-		//puts(dump);
+		strncpy(portH.port[i], tokenizer,4);
+		//puts(tokenizer);
+        i++;
+        if(i == 6)break;
 	}
 	if(i < 6){
-		printf("Address parsing failed. Exiting.\n");
+		printf("PASV reply parsing fail\n");
+        exit(-1);
 	}
 
 
-	/*for(i = 0; i < 6; i++){
-		puts(port[i]);
-	}*/
-	
-	int *pasvResponse = malloc(6*sizeof(int));
-	for(i = 0; i < 6; i++){
-		pasvResponse[i] = atoi(port[i]);
-		//printf("i - %d\n", pasvResponse[i]);
-	}
 		 
-	return pasvResponse;
+	return portH;
 
 }
 
@@ -218,7 +231,7 @@ int login(int sockFd, char *username, char *password){
 
 }
 
-URLData* parseURL(const char* url){
+URLInfo* parseURL(const char* url){
 	char* regexp = "ftp://(([^:]*):([^@]*)@)?([^/]+)/(.*/)?([^/]*)"; 
 	regex_t regex;
 	int r =	regcomp(&regex, regexp, REG_EXTENDED);
@@ -233,7 +246,7 @@ URLData* parseURL(const char* url){
 		return NULL;
 	}
 	//grupo 0 1 6 pra descartar	
-	URLData* data = malloc(sizeof(URLData));
+	URLInfo* data = malloc(sizeof(URLInfo));
 	data->user = malloc(1+pmatch[2].rm_eo-pmatch[2].rm_so);
 	data->password = malloc(1+pmatch[3].rm_eo-pmatch[3].rm_so);
 	data->hostname = malloc(1+pmatch[4].rm_eo-pmatch[4].rm_so);
@@ -251,7 +264,9 @@ URLData* parseURL(const char* url){
 	data->filename[pmatch[6].rm_eo-pmatch[6].rm_so] = 0;
 
     puts(data->hostname);
+    puts("filepath");
     puts(data->filepath);
+    puts("filename");
     puts(data->filename);
 	regfree(&regex);
 	return data;

@@ -31,32 +31,50 @@ struct addrinfo* getIP(char* name){
 
 
 int main(int argc, char** argv){
+
+
+	char reply[BUFFER_SIZE];
+	URLInfo *data;
+	struct addrinfo *address;
+	int socketfd, connectstatus,st;
+
 	if (argc != 2){
 		printf("Usage: %s ftp://[username:password]@site/path/to/file\n", argv[0]);
 		exit(-1);
 	}
 	
-	URLData *data = parseURL(argv[1]);
+	data = parseURL(argv[1]);
 	if(data == NULL){
 		printf("Exiting");
 		exit(-1);
 	}		
+
+	if(strlen(data->user) == 0 || strlen(data->password) == 0){
+		puts("Can't parse login info, logging in as anonymous");
+		free(data->user);
+		free(data->password);
+		data->user = malloc(10);
+		data->password = malloc(1);
+		strncpy(data->user, "anonymous",10);
+	}
+
 	
 	
-	struct addrinfo *address = getIP(data->hostname);
+	
+	address = getIP(data->hostname);
 	if(address == NULL){
 		exit(-1);
 	}
 
 
-	int socketfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);	
+	socketfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);	
 	if(socketfd == -1){
 		printf("Socket fail");
 		exit(-1);
 	} else{
 		printf("Socket Success");
 	}
-	int connectstatus = connect(socketfd, address->ai_addr, address->ai_addrlen);
+	connectstatus = connect(socketfd, address->ai_addr, address->ai_addrlen);
 	if(connectstatus == -1){
 		printf("connect fail");
 		exit(-1);
@@ -64,20 +82,16 @@ int main(int argc, char** argv){
 		printf("connect success");
 	}
 
-	char responses[BUFFER_SIZE];
-	//recv(socketfd, responses, BUFFER_SIZE, 0);
-	//Check for code 220 
 
-
-	//
-	int st;
-	if(strlen(data->user) == 0 || strlen(data->password) == 0){
-		printf("No username or password supplied");
+	//Check for server ready code
+	recv(socketfd, reply, BUFFER_SIZE, 0);
+	if(strncmp("220 ", reply, 4)){
+		printf("Server is not ready");
 		exit(-1);
-	}	
-	else{
-		st = login(socketfd, data->user, data->password);	
 	}
+
+	st = login(socketfd, data->user, data->password);	
+	
 	
 	if(st == 0){
 		printf("Login successful\n");	
@@ -89,19 +103,22 @@ int main(int argc, char** argv){
 	else if(st == -2){
 		printf("Login incorrect\n");
 		exit(-2);
+	} else{
+		exit(-3);
 	}
+
 
 	//SETUP PASV
 	send(socketfd, "PASV\r\n", 6, 0);
-	recv(socketfd, responses, BUFFER_SIZE, 0);
+	recv(socketfd, reply, BUFFER_SIZE, 0);
 	
-	if(strncmp(responses, "227 ", 4)){
+	if(strncmp(reply, "227 ", 4)){
 		printf("couldn't pasv\n");
 		exit(-1);
 	}	
 	
 	
-	int *pasvResponse = getPort(responses);
+	int *pasvResponse = getPort(reply);
 	
 	
 	char ipaddr[21];
@@ -159,7 +176,7 @@ int login(int sockFd, char *username, char *password){
 
 }
 
-URLData* parseURL(const char* url){
+URLInfo* parseURL(const char* url){
 
 	
 }
