@@ -23,10 +23,10 @@ int main(int argc, char** argv){
 		puts("Can't parse login info, logging in as anonymous");
 		free(data->user);
 		free(data->password);
-		data->user = malloc(10);
-		data->password = malloc(10);
-		strncpy(data->user, "anonymous",9);
-        strncpy(data->password, "anonymous",9);
+		data->user = malloc(11);
+		data->password = malloc(11);
+		strncpy(data->user, "anonymous",10);
+        strncpy(data->password, "anonymous",10);
         puts(data->user);
 	}
 	
@@ -39,22 +39,23 @@ int main(int argc, char** argv){
 
 	socketfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);	
 	if(socketfd == -1){
-		printf("Socket fail");
+		printf("Socket fail\n");
 		exit(-1);
 	} else{
-		printf("Socket Success");
+		printf("Socket Success\n");
 	}
 	connectstatus = connect(socketfd, address->ai_addr, address->ai_addrlen);
 	if(connectstatus == -1){
-		printf("connect fail");
+		printf("connect fail\n");
 		exit(-1);
 	} else{
-		printf("connect success");
+		printf("connect success\n");
 	}
 
 	//Check for server ready code
 	recv(socketfd, reply, BUFFER_SIZE, 0);
-	if(strncmp("220 ", reply, 4)){
+	if(strncmp("220", reply, 3)){
+        puts(reply);
 		printf("Server is not ready");
 		exit(-1);
 	}
@@ -76,9 +77,9 @@ int main(int argc, char** argv){
 	}
 
 	send(socketfd, "PASV\r\n", 6, 0);
-	recv(socketfd, reply, 1000, 0);
+	recv(socketfd, reply, BUFFER_SIZE, 0);
 	
-	if(strncmp(reply, "227 ", 4)){
+	if(strncmp(reply, "227", 3)){
 		printf("couldn't pasv\n");
 		exit(-1);
 	}	
@@ -145,22 +146,32 @@ int main(int argc, char** argv){
 
     strncat(filepath,"\r\n",3);
 
-
-	puts(filepath);
-	send(socketfd, filepath, strlen(filepath), 0);
-	recv(socketfd, reply, BUFFER_SIZE, 0);
-	if(strncmp("150 ", reply, 4)){
-		puts("file is unavailable at this time");
-		return -1;
-	}
+    puts(filepath);
+    int counter = 0;
+    while(1){
+        
+        send(socketfd, filepath, strlen(filepath), 0);
+        recv(socketfd, reply, BUFFER_SIZE, 0);
+        if(strncmp("150", reply, 3)){
+            puts("file is unavailable at this time");
+            counter ++;
+            if(counter == 5){
+                puts("File unavailable");
+                exit(-1);
+            }
+            sleep(1);
+            continue;
+        }
+        break;
+    }
 
 	char tmpfile[BUFFER_SIZE];
-	int bytesread;
+	int read = 1;
 	int fd = open(data->filename, O_CREAT|O_WRONLY, 0777);
-	do{
-		bytesread = recv(ftpsocketfd, tmpfile, BUFFER_SIZE, 0);
-		write(fd, tmpfile, bytesread);
-	}while(bytesread);
+	while(read){
+		read = recv(ftpsocketfd, tmpfile, BUFFER_SIZE, 0);
+		write(fd, tmpfile, read);
+	}
 	close(fd);
 
 	
@@ -226,34 +237,39 @@ PortHelper getPort(char* reply){
 }
 
 int login(int sockFd, char *username, char *password){
-	char *reply = malloc(1000);
+	char *reply = malloc(BUFFER_SIZE);
 	char *userMsg = (char *) malloc(8+strlen(username));
 	sprintf(userMsg, "USER %s\r\n", username);
 	char *passMsg = (char *) malloc(8+strlen(password));
 	sprintf(passMsg, "PASS %s\r\n", password);
 
+    puts(userMsg);
+    puts(passMsg);
+
 	int sent = send(sockFd, userMsg, strlen(userMsg), 0);	
 	if(sent <= 0)
 		return -1;
-	recv(sockFd, reply, 1000, 0);
+	recv(sockFd, reply, BUFFER_SIZE, 0);
 
 	//printf("0 - %s\n", reply);
 
-	if(strncmp("331 ", reply, 4)){
+	if(strncmp("331", reply, 3)){
+        puts("331 fail");
+        puts(reply);
 		return -1;
 	}
 
 	sent = send(sockFd, passMsg, strlen(passMsg), 0);
 	if(sent <= 0)
 		return -1;
-	recv(sockFd, reply, 1000, 0);
+	recv(sockFd, reply, BUFFER_SIZE, 0);
 	
 	//printf("1 - %s", reply);
 
-	if(!strncmp("530 ", reply, 4)){
+	if(!strncmp("530", reply, 3)){
 		return -2;
 	}	
-	else if(!strncmp("230 ", reply, 4)){
+	else if(!strncmp("230", reply, 3)){
 		free(reply);
 		return 0;
 	}
