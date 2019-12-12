@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
-//#include <netdb.h>
 #include <strings.h>
 #include <string.h>
 #include <regex.h>
@@ -20,6 +19,8 @@
 #define BUFFER_SIZE 256
 
 #define NO_FILEPATH_TEST "ftp://anonymous:anonymous@speedtest.tele2.net/5MB.zip"
+#define RETRY_AGAIN_TEST "ftp://demo:password@test.rebex.net/pub/example/KeyGenerator.png"
+
 
 typedef struct URLInfo
 {
@@ -29,6 +30,7 @@ typedef struct URLInfo
 	char* filename; 
 	char* filepath;
 }URLInfo;
+
 
 
 typedef struct PortHelper{

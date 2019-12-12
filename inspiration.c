@@ -2,76 +2,89 @@
 
 
 int main(int argc, char** argv){
+
+    char reply[BUFFER_SIZE];
+	URLInfo *data;
+	struct addrinfo *address;
+	int socketfd, connectstatus,st;
+
 	if (argc != 2){
 		printf("Usage: %s ftp://[username:password]@site/path/to/file\n", argv[0]);
 		exit(-1);
 	}
 	
-	URLInfo *data = parseURL(argv[1]);
+	data = parseURL(argv[1]);
 	if(data == NULL){
 		puts("Exiting");
 		exit(-1);
 	}		
+
+    if(strlen(data->user) == 0 || strlen(data->password) == 0){
+		puts("Can't parse login info, logging in as anonymous");
+		free(data->user);
+		free(data->password);
+		data->user = malloc(10);
+		data->password = malloc(10);
+		strncpy(data->user, "anonymous",9);
+        strncpy(data->password, "anonymous",9);
+        puts(data->user);
+	}
 	
 	
-	struct addrinfo *address = getIP(data->hostname);
+	address = getIP(data->hostname);
 	if(address == NULL){
 		exit(-1);
 	}
 
 
-	int socketfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);	
+	socketfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);	
 	if(socketfd == -1){
-		perror("couldn't open socket, aborting:");
+		printf("Socket fail");
 		exit(-1);
+	} else{
+		printf("Socket Success");
 	}
-	int connectstatus = connect(socketfd, address->ai_addr, address->ai_addrlen);
+	connectstatus = connect(socketfd, address->ai_addr, address->ai_addrlen);
 	if(connectstatus == -1){
-		perror("couldn't connect to server, aborting:");
+		printf("connect fail");
+		exit(-1);
+	} else{
+		printf("connect success");
+	}
+
+	//Check for server ready code
+	recv(socketfd, reply, BUFFER_SIZE, 0);
+	if(strncmp("220 ", reply, 4)){
+		printf("Server is not ready");
 		exit(-1);
 	}
-	else
-		puts("connection successfully made");
 
-	char *responses = malloc(1000);
-	recv(socketfd, responses, 1000, 0);
-	if(strncmp("220 ", responses, 4)){
-		printf("No 220 code received");
-		exit(-1);
-	}
+    st = login(socketfd, data->user, data->password);
 
-
-	int st;
-	if(strlen(data->user) == 0 || strlen(data->password) == 0){
-		printf("No credentials provided. Logging in with default credentials:\nusername: anonymous\npassword: not.an@email.com\n");
-			st = login(socketfd, "anonymous", "not.an@email.com");	
-	}	
-	else{
-		st = login(socketfd, data->user, data->password);	
-	}
-	
 	if(st == 0){
 		printf("Login successful\n");	
 	}
 	else if(st == -1){
-		printf("Error\n");
+		printf("Login Error\n");
 		exit(-1);
 	}
 	else if(st == -2){
 		printf("Login incorrect\n");
 		exit(-2);
+	} else{
+		exit(-3);
 	}
 
 	send(socketfd, "PASV\r\n", 6, 0);
-	recv(socketfd, responses, 1000, 0);
+	recv(socketfd, reply, 1000, 0);
 	
-	if(strncmp(responses, "227 ", 4)){
+	if(strncmp(reply, "227 ", 4)){
 		printf("couldn't pasv\n");
 		exit(-1);
 	}	
 	
 	
-	PortHelper portH = getPort(responses);
+	PortHelper portH = getPort(reply);
 	//printf( "%d.%d.%d.%d", pasvResponse[0], pasvResponse[1], pasvResponse[2], pasvResponse[3]);
 	
 	char ipaddr[45];
@@ -99,37 +112,57 @@ int main(int argc, char** argv){
 	inet_aton(ipaddr, (struct in_addr*) &addr.sin_addr.s_addr);
 
 	
-	int secondsocketfd = socket(AF_INET, SOCK_STREAM, 0);
-	int secondsocketconnect = connect(secondsocketfd,(const struct sockaddr*) &addr, sizeof(addr));
-	if(secondsocketconnect == -1){
+	int ftpsocketfd = socket(AF_INET, SOCK_STREAM, 0);
+	int ftpsocketconnect = connect(ftpsocketfd,(const struct sockaddr*) &addr, sizeof(addr));
+	if(ftpsocketconnect == -1){
 		puts("pasv connection not made");
 	}
 
 	
-	char fileretr[400];
-	int lengthfileretr;
-	if(strlen(data->filepath) != 0)
-		lengthfileretr = snprintf(fileretr, 400, "RETR %s/%s\r\n", data->filepath, data->filename);	
-	else
-		lengthfileretr = snprintf(fileretr, 400, "RETR %s\r\n", data->filename);	
-	
-	send(socketfd, fileretr, lengthfileretr, 0);
-	recv(socketfd, responses, 1000, 0);
-	if(strncmp("150 ", responses, 4)){
+	char filepath[BUFFER_SIZE];
+	int tempsize=0;
+
+
+    memcpy(filepath, "RETR ",6);
+
+    tempsize = strlen(data->filepath);
+    if(tempsize!=0){
+        if((tempsize + 8) > BUFFER_SIZE){
+            puts("file path too big");
+            exit(-1);
+        }
+        strncat(filepath, data->filepath,BUFFER_SIZE - tempsize);
+        //strncat(filepath, "/",1);
+        
+    }
+    tempsize = strlen(data->filename);
+    if(tempsize == 0) {
+        puts("no filename");
+        exit(-1);
+    }
+
+    strncat(filepath, data->filename, BUFFER_SIZE - strlen(filepath));
+
+    strncat(filepath,"\r\n",3);
+
+
+	puts(filepath);
+	send(socketfd, filepath, strlen(filepath), 0);
+	recv(socketfd, reply, BUFFER_SIZE, 0);
+	if(strncmp("150 ", reply, 4)){
 		puts("file is unavailable at this time");
 		return -1;
 	}
 
-	char tmpfile[1000];
+	char tmpfile[BUFFER_SIZE];
 	int bytesread;
-	int fd = open(data->filename, O_CREAT|O_TRUNC|O_WRONLY, 0777);
+	int fd = open(data->filename, O_CREAT|O_WRONLY, 0777);
 	do{
-		bytesread = recv(secondsocketfd, tmpfile, 1000, 0);
+		bytesread = recv(ftpsocketfd, tmpfile, BUFFER_SIZE, 0);
 		write(fd, tmpfile, bytesread);
 	}while(bytesread);
 	close(fd);
-	
-	free(responses);
+
 	
 	return 0;
 	
@@ -166,7 +199,6 @@ struct addrinfo* getIP(char* name){
 
 //Done - Francisco Correia
 PortHelper getPort(char* reply){
-	//puts(ip);
 	int i;
 	char *tokenizer;
 	PortHelper portH;
@@ -194,7 +226,7 @@ PortHelper getPort(char* reply){
 }
 
 int login(int sockFd, char *username, char *password){
-	char *responses = malloc(1000);
+	char *reply = malloc(1000);
 	char *userMsg = (char *) malloc(8+strlen(username));
 	sprintf(userMsg, "USER %s\r\n", username);
 	char *passMsg = (char *) malloc(8+strlen(password));
@@ -203,26 +235,26 @@ int login(int sockFd, char *username, char *password){
 	int sent = send(sockFd, userMsg, strlen(userMsg), 0);	
 	if(sent <= 0)
 		return -1;
-	recv(sockFd, responses, 1000, 0);
+	recv(sockFd, reply, 1000, 0);
 
-	//printf("0 - %s\n", responses);
+	//printf("0 - %s\n", reply);
 
-	if(strncmp("331 ", responses, 4)){
+	if(strncmp("331 ", reply, 4)){
 		return -1;
 	}
 
 	sent = send(sockFd, passMsg, strlen(passMsg), 0);
 	if(sent <= 0)
 		return -1;
-	recv(sockFd, responses, 1000, 0);
+	recv(sockFd, reply, 1000, 0);
 	
-	//printf("1 - %s", responses);
+	//printf("1 - %s", reply);
 
-	if(!strncmp("530 ", responses, 4)){
+	if(!strncmp("530 ", reply, 4)){
 		return -2;
 	}	
-	else if(!strncmp("230 ", responses, 4)){
-		free(responses);
+	else if(!strncmp("230 ", reply, 4)){
+		free(reply);
 		return 0;
 	}
 	else{
