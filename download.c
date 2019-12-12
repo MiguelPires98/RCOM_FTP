@@ -1,13 +1,14 @@
 #include "download.h"
 
 struct addrinfo* getIP(char* name){
-	struct addrinfo hints;
-	memset(&hints, 0, sizeof hints);
+	
+	
+	struct addrinfo hints; 
 	//we are only interested in IPv4 address of sock_stream socket type
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
-	struct addrinfo *info;
+	struct addrinfo *info; 
 	memset(&info, 0, sizeof hints);
 	char port[3]; 
 	sprintf(port, "%d", FTP_PORT);
