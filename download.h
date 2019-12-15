@@ -41,7 +41,7 @@ struct addrinfo* getIP(char* name);
 URLInfo* parseURL(const char* url);
 PortHelper getPort(char* ip);
 int login(int sockFd, char *username, char *password);
-
+int stateMachineUrl(const char *parse_url, URLInfo *url, int login_mode);
 
 
 

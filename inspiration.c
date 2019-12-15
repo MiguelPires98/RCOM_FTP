@@ -279,46 +279,175 @@ int login(int sockFd, char *username, char *password){
 
 }
 
-URLInfo* parseURL(const char* url){
-	char* regexp = "ftp://(([^:]*):([^@]*)@)?([^/]+)/(.*/)?([^/]*)"; 
-	regex_t regex;
-	int r =	regcomp(&regex, regexp, REG_EXTENDED);
-	if (r != 0){
-		perror("regex not compiled:");
-		return NULL;
-	}
-	regmatch_t pmatch[7];
-	r = regexec(&regex, url, 7, pmatch, 0);
-	if (r == REG_NOMATCH){
-		perror("regex not matches:");
-		return NULL;
-	}
-	//grupo 0 1 6 pra descartar	
-	URLInfo* data = malloc(sizeof(URLInfo));
-	data->user = malloc(1+pmatch[2].rm_eo-pmatch[2].rm_so);
-	data->password = malloc(1+pmatch[3].rm_eo-pmatch[3].rm_so);
-	data->hostname = malloc(1+pmatch[4].rm_eo-pmatch[4].rm_so);
-	data->filepath = malloc(1+pmatch[5].rm_eo-pmatch[5].rm_so);
-	data->filename = malloc(1+pmatch[6].rm_eo-pmatch[6].rm_so);
-	strncpy(data->user, url+pmatch[2].rm_so, pmatch[2].rm_eo-pmatch[2].rm_so);
-	strncpy(data->password, url+pmatch[3].rm_so, pmatch[3].rm_eo-pmatch[3].rm_so);
-	strncpy(data->hostname, url+pmatch[4].rm_so, pmatch[4].rm_eo-pmatch[4].rm_so);
-	strncpy(data->filepath, url+pmatch[5].rm_so, pmatch[5].rm_eo-pmatch[5].rm_so);
-	strncpy(data->filename, url+pmatch[6].rm_so, pmatch[6].rm_eo-pmatch[6].rm_so);
-	data->user[pmatch[2].rm_eo-pmatch[2].rm_so] = 0;
-	data->password[pmatch[3].rm_eo-pmatch[3].rm_so] = 0;
-	data->hostname[pmatch[4].rm_eo-pmatch[4].rm_so] = 0;
-	data->filepath[pmatch[5].rm_eo-pmatch[5].rm_so] = 0;
-	data->filename[pmatch[6].rm_eo-pmatch[6].rm_so] = 0;
+//Done - Roberto Lopes
+URLInfo* parseURL(const char* parse_url) {
 
-    puts(data->hostname);
-    puts("filepath");
-    puts(data->filepath);
-    puts("filename");
-    puts(data->filename);
-	regfree(&regex);
-	return data;
+		URLInfo* url = malloc(sizeof(URLInfo));
+
+	url->filename = malloc(BUFFER_SIZE);
+	url->filepath = malloc(BUFFER_SIZE);
+	url->hostname = malloc(BUFFER_SIZE);
+	url->password = malloc(BUFFER_SIZE);
+	url->user = malloc(BUFFER_SIZE);
+
+    //login mode(true if login mode)
+    unsigned int login_mode = 0;
+    if (parse_url[6] == '[') {
+        login_mode = 1;
+				stateMachineUrl(parse_url, url, login_mode);
+
+    }
+    //anonymous mode
+    else
+    {
+        login_mode = 0;
+        stateMachineUrl(parse_url, url, login_mode);
+    }
+
+	printf("filename %s  size: %ld\n", url->filename, strlen(url->filename));
+	printf("filepath %s  size: %ld\n", url->filepath, strlen(url->filepath));
+	printf("hostname %s  size: %ld\n", url->hostname, strlen(url->hostname));
+	printf("password %s  size: %ld\n", url->password, strlen(url->password));
+	printf("user %s  size: %ld\n", url->user, strlen(url->user));
+
+    return url;
+}
+
+int stateMachineUrl(const char *parse_url, URLInfo *url, int login_mode) {
+    char protocol[] = "ftp://";
+
+	char tempBuffer[BUFFER_SIZE];
+
+    int i = 0;
+
+    //read protocol
+    for (i = 0; i < sizeof(protocol) - 1; i++)
+    {
+
+        if (protocol[i] != parse_url[i])
+        {
+            return 1;
+        }
+    }
+
 	
+    unsigned int step = 0;
+    unsigned int indice = 0; //indice que vai ser copiado
+
+    // if (!login_mode)
+    // {
+    //     step = 2;
+    // }
+    // else
+    // {
+    //     i++; //to ignore '['
+    // }
+
+    while (i < strlen(parse_url))
+    {
+        switch (step)
+        {
+
+        //reading a username
+        case (0):
+            if (parse_url[i] == ':')
+            {
+				tempBuffer[indice] = 0;
+				strncpy(url->user, tempBuffer,BUFFER_SIZE);
+                step = 1;
+                indice = 0;
+            }
+			else if(parse_url[i] == '@'){
+				tempBuffer[indice] = 0;
+				strncpy(url->user, tempBuffer,BUFFER_SIZE);
+				step = 2;
+				indice = 0;
+				url->password[0] = 0;
+			} else if(parse_url[i] == '/'){
+				tempBuffer[indice] = 0;
+				strncpy(url->hostname, tempBuffer,BUFFER_SIZE);
+				step=3;
+				indice = 0;
+				url->user[0] = 0;
+				url->password[0] = 0;
+			}
+            else
+            {
+				tempBuffer[indice] = parse_url[i];
+                indice++;
+            }
+            break;
+
+        //reading a password
+        case (1):
+            if (parse_url[i] == '@')
+            {
+				url->password[indice] = 0;
+                step = 2;
+                indice = 0;
+            }
+            else
+            {
+                url->password[indice] = parse_url[i];
+                indice++;
+            }
+            break;
+
+        //reading a host
+        case (2):
+            if (parse_url[i] == '/')
+            {
+				url->hostname[indice] = 0;
+                step = 3;
+                indice = 0;
+            }
+            else
+            {
+                url->hostname[indice] = parse_url[i];
+                indice++;
+            }
+            break;
+
+        //reading a url_path
+        case (3):
+            url->filepath[indice] = parse_url[i];
+            indice++;
+            break;
+
+        default:
+            break;
+        }
+		if (indice == BUFFER_SIZE - 1){
+			puts("Path to big");
+			exit(-1);
+
+		} 
+        i++; //next array index
+    }
+	url->filepath[indice] = 0;
+
+	
+    char *path = (char*)malloc(strlen(url->filepath));
+    char *pathtemp = malloc(strlen(url->filepath));
+    pathtemp = url->filepath;
+    unsigned int cnt = 0;
+		int j = 0;
+    while(cnt < strlen(url->filepath)){
+        if(strchr(pathtemp, '/') != NULL){
+            path[cnt] = url->filepath[cnt];
+        }
+        else{
+					url->filename[j] = url->filepath[cnt];
+				 	j++;
+        }
+        pathtemp++;
+        cnt++;
+    }
+
+		path[strlen(path)] = 0; //erase last char from string
+    strcpy(url->filepath, path);
+
+		return 0;
 }
 
 
