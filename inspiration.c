@@ -290,19 +290,9 @@ URLInfo* parseURL(const char* parse_url) {
 	url->password = malloc(BUFFER_SIZE);
 	url->user = malloc(BUFFER_SIZE);
 
-    //login mode(true if login mode)
-    unsigned int login_mode = 0;
-    if (parse_url[6] == '[') {
-        login_mode = 1;
-				stateMachineUrl(parse_url, url, login_mode);
+    
+	stateMachineUrl(parse_url, url);
 
-    }
-    //anonymous mode
-    else
-    {
-        login_mode = 0;
-        stateMachineUrl(parse_url, url, login_mode);
-    }
 
 	printf("filename %s  size: %ld\n", url->filename, strlen(url->filename));
 	printf("filepath %s  size: %ld\n", url->filepath, strlen(url->filepath));
@@ -313,7 +303,7 @@ URLInfo* parseURL(const char* parse_url) {
     return url;
 }
 
-int stateMachineUrl(const char *parse_url, URLInfo *url, int login_mode) {
+int stateMachineUrl(const char *parse_url, URLInfo *url) {
     char protocol[] = "ftp://";
 
 	char tempBuffer[BUFFER_SIZE];
