@@ -237,40 +237,32 @@ PortHelper getPort(char* reply){
 }
 
 int login(int sockFd, char *username, char *password){
-	char *reply = malloc(BUFFER_SIZE);
 	char *userMsg = (char *) malloc(8+strlen(username));
 	sprintf(userMsg, "USER %s\r\n", username);
 	char *passMsg = (char *) malloc(8+strlen(password));
 	sprintf(passMsg, "PASS %s\r\n", password);
-
-    puts(userMsg);
-    puts(passMsg);
+	char *ack = malloc(BUFFER_SIZE);
 
 	int sent = send(sockFd, userMsg, strlen(userMsg), 0);	
 	if(sent <= 0)
 		return -1;
-	recv(sockFd, reply, BUFFER_SIZE, 0);
+	recv(sockFd, ack, BUFFER_SIZE, 0);
 
-	//printf("0 - %s\n", reply);
-
-	if(strncmp("331", reply, 3)){
-        puts("331 fail");
-        puts(reply);
+	if(strncmp(" 331 ", ack, 5)){
+        pritnf("331 fail"):
 		return -1;
 	}
 
 	sent = send(sockFd, passMsg, strlen(passMsg), 0);
 	if(sent <= 0)
 		return -1;
-	recv(sockFd, reply, BUFFER_SIZE, 0);
+	recv(sockFd, ack, BUFFER_SIZE, 0);
 	
-	//printf("1 - %s", reply);
-
-	if(!strncmp("530", reply, 3)){
+	if(!strncmp(" 550 ", ack, 5)){
 		return -2;
 	}	
-	else if(!strncmp("230", reply, 3)){
-		free(reply);
+	else if(!strncmp(" 230 ", ack, 5)){
+		free(ack);
 		return 0;
 	}
 	else{
