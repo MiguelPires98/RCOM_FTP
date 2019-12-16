@@ -243,18 +243,16 @@ int login(int sockFd, char *username, char *password){
 	char *passMsg = (char *) malloc(8+strlen(password));
 	sprintf(passMsg, "PASS %s\r\n", password);
 
-    puts(userMsg);
-    puts(passMsg);
+   	printf("%s", userMsg);
+   	printf("%s", passMsg);
 
 	int sent = send(sockFd, userMsg, strlen(userMsg), 0);	
 	if(sent <= 0)
 		return -1;
 	recv(sockFd, reply, BUFFER_SIZE, 0);
 
-	//printf("0 - %s\n", reply);
-
 	if(strncmp("331", reply, 3)){
-        puts("331 fail");
+        printf("331 fail");
         puts(reply);
 		return -1;
 	}
@@ -263,13 +261,11 @@ int login(int sockFd, char *username, char *password){
 	if(sent <= 0)
 		return -1;
 	recv(sockFd, reply, BUFFER_SIZE, 0);
-	
-	//printf("1 - %s", reply);
 
 	if(!strncmp("530", reply, 3)){
 		return -2;
 	}	
-	else if(!strncmp("230", reply, 3)){
+	else if(strncmp("530", reply, 3)){
 		free(reply);
 		return 0;
 	}
